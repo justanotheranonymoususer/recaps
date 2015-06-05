@@ -248,7 +248,8 @@ BOOL ShowPopupMenu(HWND hWnd)
 	}
 
 	// Check the main language
-	CheckMenuRadioItem(hMainLocalePop, 0, g_keyboardInfo.count - 1, g_keyboardInfo.main, MF_BYPOSITION);
+	CheckMenuRadioItem(hMainLocalePop, ID_MAIN_LANG, ID_MAIN_LANG + g_keyboardInfo.count - 1, 
+		ID_MAIN_LANG + g_keyboardInfo.main, MF_BYCOMMAND);
 
 	// Create the main popup menu
 	HMENU hPop = CreatePopupMenu();
@@ -267,11 +268,12 @@ BOOL ShowPopupMenu(HWND hWnd)
 		swprintf_s(szBuffer, L"%s <=> %s", 
 			g_keyboardInfo.names[g_keyboardInfo.main], g_keyboardInfo.names[layout]);
 
-		UINT flags = MF_STRING;
-		if(layout == g_keyboardInfo.paired)
-			flags |= MF_CHECKED;
-		AppendMenu(hPop, flags, ID_LANG + layout, szBuffer);
+		AppendMenu(hPop, MF_STRING, ID_LANG + layout, szBuffer);
 	}
+
+	// Check the paired language
+	CheckMenuRadioItem(hPop, ID_LANG, ID_LANG + g_keyboardInfo.count - 1, 
+		ID_LANG + g_keyboardInfo.paired, MF_BYCOMMAND);
 
 	AppendMenu(hPop, MF_SEPARATOR, 0, NULL);
 	AppendMenu(hPop, MF_STRING, ID_EXIT, L"Exit");
