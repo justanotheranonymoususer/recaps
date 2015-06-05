@@ -393,10 +393,10 @@ void SaveConfiguration(const KeyboardLayoutInfo* info)
 		const WCHAR *pLocaleName;
 
 		pLocaleName = info->names[info->main];
-		RegSetValueEx(hkey, L"main", 0, REG_SZ, (const BYTE *)(pLocaleName), (wcslen(pLocaleName) + 1) * sizeof(WCHAR));
+		RegSetValueEx(hkey, L"main", 0, REG_SZ, (const BYTE *)(pLocaleName), (DWORD)((wcslen(pLocaleName) + 1) * sizeof(WCHAR)));
 
 		pLocaleName = info->names[info->paired];
-		RegSetValueEx(hkey, L"paired", 0, REG_SZ, (const BYTE *)(pLocaleName), (wcslen(pLocaleName) + 1) * sizeof(WCHAR));
+		RegSetValueEx(hkey, L"paired", 0, REG_SZ, (const BYTE *)(pLocaleName), (DWORD)((wcslen(pLocaleName) + 1) * sizeof(WCHAR)));
 
 		RegCloseKey(hkey);
 	}
