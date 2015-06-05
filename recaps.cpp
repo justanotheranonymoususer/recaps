@@ -65,7 +65,6 @@ struct KeyboardLayoutInfo
 	UINT  menuIds[MAX_LAYOUTS];
 	BOOL  inUse[MAX_LAYOUTS];
 	UINT  count;
-	UINT  current;
 };
 
 KeyboardLayoutInfo g_keyboardInfo = { 0 };
@@ -400,12 +399,11 @@ HKL SwitchLayout()
 	// Activate the selected language
 	if(found)
 	{
-		g_keyboardInfo.current = newLanguage;
-		PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[g_keyboardInfo.current]));
+		PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[newLanguage]));
 #ifdef _DEBUG
-		PrintDebugString("Language set to %S", g_keyboardInfo.names[g_keyboardInfo.current]);
+		PrintDebugString("Language set to %S", g_keyboardInfo.names[newLanguage]);
 #endif
-		return g_keyboardInfo.hkls[g_keyboardInfo.current];
+		return g_keyboardInfo.hkls[newLanguage];
 	}
 
 	return NULL;
