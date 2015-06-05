@@ -46,7 +46,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define APPWM_TRAYICON       WM_APP
 #define APPWM_NOP            WM_APP + 1
 
-//  Our commands
+// Our commands
 #define ID_ABOUT             2000
 #define ID_EXIT              2001
 #define ID_LANG              2002
@@ -204,7 +204,7 @@ int OnCommand(HWND hWnd, WORD wID, HWND hCtl)
 {
 	UNREFERENCED_PARAMETER(hCtl);
 
-	//  Have a look at the command and act accordingly
+	// Have a look at the command and act accordingly
 	if(wID == ID_EXIT)
 	{
 		PostMessage(hWnd, WM_CLOSE, 0, 0);
