@@ -46,7 +46,7 @@ void PrintDebugString(const char* format, ...)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Prints an error message to the debugger
+// Checks whether the requested command line switch exists
 BOOL DoesCmdLineSwitchExists(const WCHAR* command)
 {
 	for(int i = 1; i < __argc; i++)
