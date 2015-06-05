@@ -31,15 +31,23 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 	L"Recaps allows you to quickly switch the current\r\n"\
 	L"language using the Capslock key.\r\n"\
 	L"\r\n"\
-	L"Capslock changes the current keyboard laguange.\r\n"\
-	L"Ctrl-Capslock fixes text you typed in the wrong laguange.\r\n"\
-	L"Alt-Capslock is the old Capslock that lets you type in CAPITAL.\r\n"\
+	L"Capslock changes between the chosen pair of keyboard laguanges.\r\n"\
+	L"Shift+Capslock changes the chosen pair of keyboard languages.\r\n"\
+	L"Ctrl+Capslock fixes text you typed in the wrong laguange.\r\n"\
+	L"Alt+Capslock is the old Capslock that lets you type in CAPITAL.\r\n"\
 	L"\r\n"\
 	L"http://www.gooli.org/blog/recaps\r\n\r\n"\
 	L"Eli Golovinsky, Israel 2008\r\n"
 
 #define HELP_TITLE \
-    L"Recaps 0.6 - Retake your Capslock!"
+    L"Recaps 0.7 alpha - Retake your Capslock!"
+
+// General constants
+#define MAXLEN 1024
+#define MAX_LAYOUTS 256
+#define MUTEX L"recaps-D3E743A3-E0F9-47f5-956A-CD15C6548789"
+#define WINDOWCLASS_NAME L"RECAPS"
+#define TITLE L"Recaps"
 
 // Tray icon constants
 #define ID_TRAYICON          1
@@ -49,22 +57,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Our commands
 #define ID_ABOUT             2000
 #define ID_EXIT              2001
-#define ID_LANG              2002
-
-// General constants
-#define MAXLEN 1024
-#define MAX_LAYOUTS 256
-#define MUTEX L"recaps-D3E743A3-E0F9-47f5-956A-CD15C6548789"
-#define WINDOWCLASS_NAME L"RECAPS"
-#define TITLE L"Recaps"
+#define ID_MAIN_LANG         2002
+#define ID_LANG              (2002 + MAX_LAYOUTS)
 
 struct KeyboardLayoutInfo
 {
 	WCHAR names[MAX_LAYOUTS][MAXLEN];
 	HKL   hkls[MAX_LAYOUTS];
-	UINT  menuIds[MAX_LAYOUTS];
-	BOOL  inUse[MAX_LAYOUTS];
 	UINT  count;
+	UINT  main;
+	UINT  paired;
 };
 
 KeyboardLayoutInfo g_keyboardInfo = { 0 };
@@ -83,6 +85,7 @@ void SaveConfiguration(const KeyboardLayoutInfo* info);
 
 HWND RemoteGetFocus();
 HKL SwitchLayout();
+HKL SwitchPair();
 LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -213,16 +216,18 @@ int OnCommand(HWND hWnd, WORD wID, HWND hCtl)
 	{
 		MessageBox(NULL, HELP_MESSAGE, HELP_TITLE, MB_OK | MB_ICONINFORMATION);
 	}
-	else
+	else if(wID >= ID_MAIN_LANG && wID < ID_MAIN_LANG + MAX_LAYOUTS)
 	{
-		for(UINT i = 0; i < g_keyboardInfo.count; i++)
-		{
-			if(g_keyboardInfo.menuIds[i] == wID)
-			{
-				g_keyboardInfo.inUse[i] = !(g_keyboardInfo.inUse[i]);
-				break;
-			}
-		}
+		UINT newMainLayout = wID - ID_MAIN_LANG;
+		if(newMainLayout == g_keyboardInfo.paired)
+			g_keyboardInfo.paired = g_keyboardInfo.main;
+
+		g_keyboardInfo.main = newMainLayout;
+		SaveConfiguration(&g_keyboardInfo);
+	}
+	else if(wID >= ID_LANG && wID < ID_LANG + MAX_LAYOUTS)
+	{
+		g_keyboardInfo.paired = wID - ID_LANG;
 		SaveConfiguration(&g_keyboardInfo);
 	}
 
@@ -233,37 +238,53 @@ int OnCommand(HWND hWnd, WORD wID, HWND hCtl)
 // Create and display a popup menu when the user right-clicks on the icon
 BOOL ShowPopupMenu(HWND hWnd)
 {
-	HMENU   hPop = NULL;
-	int     i = 0;
-	BOOL    cmd;
-	POINT   curpos;
-
-	// Create the menu
-	hPop = CreatePopupMenu();
-	InsertMenu(hPop, i++, MF_BYPOSITION | MF_STRING, ID_ABOUT, L"Help...");
-	InsertMenu(hPop, i++, MF_SEPARATOR, 0, NULL);
+	// Create a submenu for the main locale
+	HMENU hMainLocalePop = CreatePopupMenu();
 
 	// Add items for the languages
 	for(UINT layout = 0; layout < g_keyboardInfo.count; layout++)
 	{
-		UINT flags = MF_BYPOSITION | MF_STRING;
-		if(g_keyboardInfo.inUse[layout])
-			flags |= MF_CHECKED;
-		InsertMenu(hPop, i++, flags, ID_LANG + layout, g_keyboardInfo.names[layout]);
-		g_keyboardInfo.menuIds[layout] = ID_LANG + layout;
+		AppendMenu(hMainLocalePop, MF_STRING, ID_MAIN_LANG + layout, g_keyboardInfo.names[layout]);
 	}
 
-	InsertMenu(hPop, i++, MF_SEPARATOR, 0, NULL);
-	InsertMenu(hPop, i++, MF_BYPOSITION | MF_STRING, ID_EXIT, L"Exit");
+	// Check the main language
+	CheckMenuRadioItem(hMainLocalePop, 0, g_keyboardInfo.count - 1, g_keyboardInfo.main, MF_BYPOSITION);
+
+	// Create the main popup menu
+	HMENU hPop = CreatePopupMenu();
+	AppendMenu(hPop, MF_STRING, ID_ABOUT, L"Help...");
+	AppendMenu(hPop, MF_SEPARATOR, 0, NULL);
+	AppendMenu(hPop, MF_POPUP, (UINT_PTR)hMainLocalePop, L"Main language");
+	AppendMenu(hPop, MF_SEPARATOR, 0, NULL);
+
+	// Add pairs of items for the languages
+	for(UINT layout = 0; layout < g_keyboardInfo.count; layout++)
+	{
+		if(layout == g_keyboardInfo.main)
+			continue;
+
+		WCHAR szBuffer[MAXLEN * 2 + 16];
+		swprintf_s(szBuffer, L"%s <=> %s", 
+			g_keyboardInfo.names[g_keyboardInfo.main], g_keyboardInfo.names[layout]);
+
+		UINT flags = MF_STRING;
+		if(layout == g_keyboardInfo.paired)
+			flags |= MF_CHECKED;
+		AppendMenu(hPop, flags, ID_LANG + layout, szBuffer);
+	}
+
+	AppendMenu(hPop, MF_SEPARATOR, 0, NULL);
+	AppendMenu(hPop, MF_STRING, ID_EXIT, L"Exit");
 
 	// Show the menu
 
 	// See http://support.microsoft.com/kb/135788 for the reasons 
 	// for the SetForegroundWindow and Post Message trick.
+	POINT curpos;
 	GetCursorPos(&curpos);
 	SetForegroundWindow(hWnd);
 	g_modalShown = TRUE;
-	cmd = (WORD)TrackPopupMenu(
+	UINT cmd = TrackPopupMenu(
 		hPop, TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
 		curpos.x, curpos.y, 0, hWnd, NULL
 		);
@@ -276,7 +297,7 @@ BOOL ShowPopupMenu(HWND hWnd)
 
 	DestroyMenu(hPop);
 
-	return cmd;
+	return cmd != 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -284,15 +305,27 @@ BOOL ShowPopupMenu(HWND hWnd)
 // Based on http://blogs.msdn.com/michkap/archive/2004/12/05/275231.aspx.
 void GetKeyboardLayouts(KeyboardLayoutInfo* info)
 {
+	BOOL mainWasChosen = FALSE;
 	memset(info, 0, sizeof(KeyboardLayoutInfo));
 	info->count = GetKeyboardLayoutList(MAX_LAYOUTS, info->hkls);
 	for(UINT i = 0; i < info->count; i++)
 	{
-		LANGID language = (LANGID)(((UINT)info->hkls[i]) & 0x0000FFFF); // bottom 16 bit of HKL
+		LANGID language = LOWORD(info->hkls[i]);
 		LCID locale = MAKELCID(language, SORT_DEFAULT);
 		GetLocaleInfo(locale, LOCALE_SLANGUAGE, info->names[i], MAXLEN);
-		info->inUse[i] = TRUE;
+
+		// Prefer English as the default main language
+		if(!mainWasChosen && language == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
+		{
+			info->main = i;
+			if(i == 0 && info->count >= 2)
+				info->paired = 1;
+			mainWasChosen = TRUE;
+		}
 	}
+
+	if(!mainWasChosen && info->count >= 2)
+		info->paired = 1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -304,19 +337,42 @@ void LoadConfiguration(KeyboardLayoutInfo* info)
 
 	result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Recaps", 0, KEY_QUERY_VALUE, &hkey);
 
-	// Load current isUse value for each language
+	// Load main and paired language
 	if(result == ERROR_SUCCESS)
 	{
-		for(UINT i = 0; i < info->count; i++)
+		WCHAR localeName[MAXLEN];
+		DWORD length;
+
+		length = sizeof(localeName);
+		result = RegGetValue(hkey, NULL, L"main", RRF_RT_REG_SZ, NULL, localeName, &length);
+		if(result == ERROR_SUCCESS)
 		{
-			DWORD data = 0;
-			DWORD length = sizeof(DWORD);
-			result = RegQueryValueEx(hkey, info->names[i], 0, NULL, (BYTE*)(&data), &length);
-			if(result == ERROR_SUCCESS)
+			for(UINT i = 0; i < info->count; i++)
 			{
-				info->inUse[i] = (BOOL)data;
+				if(wcscmp(localeName, info->names[i]) == 0)
+				{
+					info->main = i;
+					break;
+				}
 			}
 		}
+
+		length = sizeof(localeName);
+		result = RegGetValue(hkey, NULL, L"paired", RRF_RT_REG_SZ, NULL, localeName, &length);
+		if(result == ERROR_SUCCESS)
+		{
+			for(UINT i = 0; i < info->count; i++)
+			{
+				if(wcscmp(localeName, info->names[i]) == 0)
+				{
+					info->paired = i;
+					break;
+				}
+			}
+		}
+
+		if(info->main == info->paired && info->count >= 2)
+			info->paired = (info->main == 0) ? 1 : 0;
 
 		RegCloseKey(hkey);
 	}
@@ -331,14 +387,16 @@ void SaveConfiguration(const KeyboardLayoutInfo* info)
 
 	result = RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\Recaps", 0, NULL, 0, KEY_SET_VALUE, NULL, &hkey, NULL);
 
-	// Save current isUse value for each language
+	// Save main and paired language
 	if(result == ERROR_SUCCESS)
 	{
-		for(UINT i = 0; i < info->count; i++)
-		{
-			DWORD data = info->inUse[i];
-			RegSetValueEx(hkey, info->names[i], 0, REG_DWORD, (CONST BYTE*)(&data), sizeof(DWORD));
-		}
+		const WCHAR *pLocaleName;
+
+		pLocaleName = info->names[info->main];
+		RegSetValueEx(hkey, L"main", 0, REG_SZ, (const BYTE *)(pLocaleName), (wcslen(pLocaleName) + 1) * sizeof(WCHAR));
+
+		pLocaleName = info->names[info->paired];
+		RegSetValueEx(hkey, L"paired", 0, REG_SZ, (const BYTE *)(pLocaleName), (wcslen(pLocaleName) + 1) * sizeof(WCHAR));
 
 		RegCloseKey(hkey);
 	}
@@ -360,19 +418,32 @@ HWND RemoteGetFocus()
 
 ///////////////////////////////////////////////////////////////////////////////
 // Returns the current layout in the active window
+HKL GetWindowLayout(HWND hWnd)
+{
+	DWORD threadId = GetWindowThreadProcessId(hWnd, NULL);
+	return GetKeyboardLayout(threadId);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Returns the current layout in the active window
 HKL GetCurrentLayout()
 {
-	HWND hwnd = RemoteGetFocus();
-	DWORD threadId = GetWindowThreadProcessId(hwnd, NULL);
-	return GetKeyboardLayout(threadId);
+	HWND hWnd = RemoteGetFocus();
+	if(!hWnd)
+		return NULL;
+
+	return GetWindowLayout(hWnd);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Switches the current language
 HKL SwitchLayout()
 {
-	HWND hwnd = RemoteGetFocus();
-	HKL currentLayout = GetCurrentLayout();
+	HWND hWnd = RemoteGetFocus();
+	if(!hWnd)
+		return NULL;
+
+	HKL currentLayout = GetWindowLayout(hWnd);
 
 	// Find the current keyboard layout's index
 	UINT i;
@@ -383,30 +454,44 @@ HKL SwitchLayout()
 	}
 	UINT currentLanguageIndex = i;
 
-	// Find the next active layout
-	BOOL found = FALSE;
-	UINT newLanguage = currentLanguageIndex;
-	for(UINT i = 0; i < g_keyboardInfo.count; i++)
-	{
-		newLanguage = (newLanguage + 1) % g_keyboardInfo.count;
-		if(g_keyboardInfo.inUse[newLanguage])
-		{
-			found = TRUE;
-			break;
-		}
-	}
+	// Decide the new layout
+	UINT newLanguage;
+	if(currentLanguageIndex == g_keyboardInfo.main)
+		newLanguage = g_keyboardInfo.paired;
+	else
+		newLanguage = g_keyboardInfo.main;
 
-	// Activate the selected language
-	if(found)
-	{
-		PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[newLanguage]));
+	// Activate the new language
+	PostMessage(hWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[newLanguage]));
 #ifdef _DEBUG
-		PrintDebugString("Language set to %S", g_keyboardInfo.names[newLanguage]);
+	PrintDebugString("Language set to %S", g_keyboardInfo.names[newLanguage]);
 #endif
-		return g_keyboardInfo.hkls[newLanguage];
+	return g_keyboardInfo.hkls[newLanguage];
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Switches the language pair
+HKL SwitchPair()
+{
+	// Find the current keyboard layout's index
+	UINT newPaired = g_keyboardInfo.paired;
+	newPaired = (newPaired + 1) % g_keyboardInfo.count;
+	if(newPaired == g_keyboardInfo.main)
+	{
+		newPaired = (newPaired + 1) % g_keyboardInfo.count;
 	}
 
-	return NULL;
+	g_keyboardInfo.paired = newPaired;
+
+	HWND hWnd = RemoteGetFocus();
+	if(hWnd)
+	{
+		PostMessage(hWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[newPaired]));
+	}
+
+	SaveConfiguration(&g_keyboardInfo);
+
+	return g_keyboardInfo.hkls[newPaired];
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -416,7 +501,8 @@ void SwitchAndConvert(void*)
 	SendKeyCombo(VK_CONTROL, 'A', TRUE);
 	HKL sourceLayout = GetCurrentLayout();
 	HKL targetLayout = SwitchLayout();
-	ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
+	if(sourceLayout && targetLayout)
+		ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -431,22 +517,27 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 	// ignore injected keystrokes
 	if(caps && (data->flags & LLKHF_INJECTED) == 0)
 	{
-		BOOL ctrl = GetKeyState(VK_CONTROL) < 0;
-
-		// Handle CapsLock - only switch current layout
-		if(!ctrl)
+		if(GetKeyState(VK_SHIFT) < 0)
 		{
-			SwitchLayout();
+			// Handle Shift+CapsLock - switch current layout pair
+			SwitchPair();
 			return 1;
 		}
-		// Handle Ctrl-CapsLock - switch current layout and convert text in current field
-		else
+		else if(GetKeyState(VK_CONTROL) < 0)
 		{
+			// Handle Ctrl+CapsLock - switch current layout and convert text in current field
+
 			// We start SwitchLayoutAndConvertSelected in another thread since it simulates 
 			// keystrokes to copy and paste the test which call back into this hook.
-			// That isn't good..
+			// That isn't good...
 			_beginthread(SwitchAndConvert, 0, NULL);
 			return 1; // prevent windows from handling the keystroke
+		}
+		else
+		{
+			// Handle CapsLock - only switch current layout
+			SwitchLayout();
+			return 1;
 		}
 	}
 
