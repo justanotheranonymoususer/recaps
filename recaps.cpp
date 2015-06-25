@@ -142,6 +142,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	if(bShowTrayIcon)
 		UnregisterClass(WINDOWCLASS_NAME, hInstance);
 	SaveConfiguration(&g_keyboardInfo);
+	// Make sure that no SwitchAndConvert threads are running
+	EnterCriticalSection(&g_csSwitchAndConvert);
+	LeaveCriticalSection(&g_csSwitchAndConvert);
 	DeleteCriticalSection(&g_csSwitchAndConvert);
 	CloseHandle(mutex);
 
