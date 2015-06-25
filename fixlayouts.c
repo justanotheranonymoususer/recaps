@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "fixlayouts.h"
+#include "clipboard.h"
 #include "utils.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -221,61 +222,19 @@ BOOL StoreClipboardData(ClipboardData* formats)
 			break;
 
 		HANDLE dataHandle = GetClipboardData(format);
-		if(!dataHandle)
-		{
-			if(GetLastError() != ERROR_SUCCESS)
-				break;
-
-			// No data here, next format
-			format = EnumClipboardFormats(format);
-			continue;
-		}
-
-		size_t size;
-		if(!(GlobalFlags(dataHandle) & GMEM_DISCARDED))
-		{
-			size = GlobalSize(dataHandle);
-			if(size == 0)
-				break;
-		}
-		else
-			size = 0;
-
-		LPVOID source = GlobalLock(dataHandle);
-		if(!source)
+		if(!dataHandle && GetLastError() != ERROR_SUCCESS)
 			break;
 
-		BOOL bCopySucceeded = FALSE;
-
-		formats->dataArray[i].format = format;
-		formats->dataArray[i].dataHandle = GlobalAlloc(GHND, size);
-		if(formats->dataArray[i].dataHandle)
+		if(dataHandle)
 		{
-			if(size == 0)
-			{
-				bCopySucceeded = TRUE;
-			}
-			else
-			{
-				LPVOID dest = GlobalLock(formats->dataArray[i].dataHandle);
-				if(dest)
-				{
-					CopyMemory(dest, source, size);
-					GlobalUnlock(formats->dataArray[i].dataHandle);
-					bCopySucceeded = TRUE;
-				}
-			}
+			size_t size;
+			formats->dataArray[i].format = format;
+			formats->dataArray[i].dataHandle = clipboard_copy_data(format, dataHandle, &size);
+			if(!formats->dataArray[i].dataHandle)
+				break;
 
-			if(!bCopySucceeded)
-				GlobalFree(formats->dataArray[i].dataHandle);
+			i++;
 		}
-
-		GlobalUnlock(dataHandle);
-
-		if(!bCopySucceeded)
-			break;
-
-		i++;
 
 		// next format
 		format = EnumClipboardFormats(format);
@@ -287,7 +246,7 @@ BOOL StoreClipboardData(ClipboardData* formats)
 	{
 		for(int j = 0; j < i; j++)
 		{
-			GlobalFree(formats->dataArray[j].dataHandle);
+			clipboard_free_data(formats->dataArray[j].format, formats->dataArray[j].dataHandle);
 		}
 
 		free(formats->dataArray);

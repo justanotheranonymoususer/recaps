@@ -193,6 +193,7 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="clipboard.c" />
     <ClCompile Include="fixlayouts.c" />
     <ClCompile Include="recaps.c" />
     <ClCompile Include="StdAfx.c">
@@ -205,6 +206,7 @@
     <ClCompile Include="utils.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="clipboard.h" />
     <ClInclude Include="fixlayouts.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="StdAfx.h" />

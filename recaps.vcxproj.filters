@@ -15,6 +15,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="clipboard.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="fixlayouts.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -45,6 +48,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="clipboard.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
