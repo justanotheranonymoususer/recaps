@@ -28,8 +28,7 @@ HKL DetectLayoutFromString(const WCHAR* str, BOOL* pmatches);
 
 // Functions to store and restore all of the data in the clipboard
 BOOL StoreClipboardData(ClipboardData* formats);
-BOOL RestoreClipboardData(const ClipboardData* formats);
-void FreeClipboardData(ClipboardData* formats);
+BOOL RestoreClipboardData(ClipboardData* formats);
 
 // Convenience functions for the clipboard
 WCHAR* GetClipboardText();
