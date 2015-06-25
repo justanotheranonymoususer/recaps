@@ -222,7 +222,14 @@ BOOL StoreClipboardData(ClipboardData* formats)
 
 		HANDLE dataHandle = GetClipboardData(format);
 		if(!dataHandle)
-			break;
+		{
+			if(GetLastError() != ERROR_SUCCESS)
+				break;
+
+			// No data here, next format
+			format = EnumClipboardFormats(format);
+			continue;
+		}
 
 		size_t size;
 		if(!(GlobalFlags(dataHandle) & GMEM_DISCARDED))
