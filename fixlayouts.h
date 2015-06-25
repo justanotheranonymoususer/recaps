@@ -15,7 +15,7 @@ struct ClipboardData
 
 // time in milliseconds to allow the target application
 // to execute commands simulated by keystrokes
-#define REMOTE_APP_WAIT 20
+#define REMOTE_APP_WAIT 100
 
 // The main function that converts the current selected text in the active 
 // window from one layout to another.
