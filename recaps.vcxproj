@@ -193,16 +193,16 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="fixlayouts.cpp" />
-    <ClCompile Include="recaps.cpp" />
-    <ClCompile Include="StdAfx.cpp">
+    <ClCompile Include="fixlayouts.c" />
+    <ClCompile Include="recaps.c" />
+    <ClCompile Include="StdAfx.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="trayicon.cpp" />
-    <ClCompile Include="utils.cpp" />
+    <ClCompile Include="trayicon.c" />
+    <ClCompile Include="utils.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="fixlayouts.h" />

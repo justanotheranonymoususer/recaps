@@ -1,16 +1,16 @@
 #pragma once
 
-struct ClipboardFormat
+typedef struct
 {
 	UINT format;
 	HANDLE dataHandle;
-};
+} ClipboardFormat;
 
-struct ClipboardData
+typedef struct
 {
 	int count;
 	ClipboardFormat* dataArray;
-};
+} ClipboardData;
 
 
 // time in milliseconds to allow the target application
