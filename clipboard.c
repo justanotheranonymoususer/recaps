@@ -16,7 +16,7 @@ static BYTE *bitmap_to_dib(const HBITMAP hbmp, size_t *size)
 	BITMAP bmp;
 	BYTE *ret;		// BITMAPINFO
 	DWORD biComp = BI_RGB;
-	size_t len;
+	DWORD len;
 	size_t hsize;
 	DWORD err;
 	int color_bit = 0;
