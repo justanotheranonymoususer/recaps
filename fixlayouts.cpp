@@ -315,7 +315,7 @@ BOOL RestoreClipboardData(ClipboardData* formats)
 WCHAR* GetClipboardText()
 {
 	if(!OpenClipboard(NULL))
-		return FALSE;
+		return NULL;
 
 	WCHAR* text = NULL;
 	HANDLE handle = GetClipboardData(CF_UNICODETEXT);
