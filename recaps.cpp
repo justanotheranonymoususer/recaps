@@ -32,9 +32,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 	L"language using the Capslock key.\r\n"\
 	L"\r\n"\
 	L"Capslock changes between the chosen pair of keyboard laguanges.\r\n"\
-	L"Shift+Capslock changes the chosen pair of keyboard languages.\r\n"\
+	L"Alt+Capslock changes the chosen pair of keyboard languages.\r\n"\
 	L"Ctrl+Capslock fixes text you typed in the wrong laguange.\r\n"\
-	L"Alt+Capslock is the old Capslock that lets you type in CAPITAL.\r\n"\
+	L"Shift+Capslock is the old Capslock that lets you type in CAPITAL.\r\n"\
 	L"\r\n"\
 	L"http://www.gooli.org/blog/recaps\r\n\r\n"\
 	L"Eli Golovinsky, Israel 2008\r\n"
@@ -519,9 +519,9 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 	// ignore injected keystrokes
 	if(caps && (data->flags & LLKHF_INJECTED) == 0)
 	{
-		if(GetKeyState(VK_SHIFT) < 0)
+		if(GetKeyState(VK_MENU) < 0)
 		{
-			// Handle Shift+CapsLock - switch current layout pair
+			// Handle Alt+CapsLock - switch current layout pair
 			SwitchPair();
 			return 1;
 		}
