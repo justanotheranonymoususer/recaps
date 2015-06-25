@@ -73,6 +73,7 @@ KeyboardLayoutInfo g_keyboardInfo = { 0 };
 BOOL g_modalShown = FALSE;
 HHOOK g_hHook = NULL;
 UINT g_uTaskbarRestart = 0;
+CRITICAL_SECTION g_csSwitchAndConvert;
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int OnTrayIcon(HWND hWnd, WPARAM wParam, LPARAM lParam);
@@ -108,6 +109,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	}
 
 	// Initialize
+	InitializeCriticalSection(&g_csSwitchAndConvert);
 	GetKeyboardLayouts(&g_keyboardInfo);
 	LoadConfiguration(&g_keyboardInfo);
 	BOOL bShowTrayIcon = !DoesCmdLineSwitchExists(L"-no_icon");
@@ -140,6 +142,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	if(bShowTrayIcon)
 		UnregisterClass(WINDOWCLASS_NAME, hInstance);
 	SaveConfiguration(&g_keyboardInfo);
+	DeleteCriticalSection(&g_csSwitchAndConvert);
 	CloseHandle(mutex);
 
 	return 0;
@@ -500,11 +503,18 @@ HKL SwitchPair()
 // Selects the entire current line and converts it to the current keyboard layout
 void SwitchAndConvert(void*)
 {
-	SendKeyCombo(VK_CONTROL, 'A', TRUE);
-	HKL sourceLayout = GetCurrentLayout();
-	HKL targetLayout = SwitchLayout();
-	if(sourceLayout && targetLayout)
-		ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
+	if(TryEnterCriticalSection(&g_csSwitchAndConvert))
+	{
+		SendKeyCombo(VK_CONTROL, 'A', TRUE);
+		HKL sourceLayout = GetCurrentLayout();
+		HKL targetLayout = SwitchLayout();
+		if(sourceLayout && targetLayout)
+		{
+			ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
+		}
+
+		LeaveCriticalSection(&g_csSwitchAndConvert);
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
