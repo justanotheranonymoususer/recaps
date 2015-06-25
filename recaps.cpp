@@ -511,10 +511,12 @@ void SwitchAndConvert(void*)
 // A LowLevelHookProc implementation that captures the CapsLock key
 LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
-	if(nCode < 0) return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+	if(nCode < 0)
+		return CallNextHookEx(g_hHook, nCode, wParam, lParam);
 
 	KBDLLHOOKSTRUCT* data = (KBDLLHOOKSTRUCT*)lParam;
-	BOOL caps = data->vkCode == VK_CAPITAL && wParam == WM_KEYDOWN;
+	BOOL caps = data->vkCode == VK_CAPITAL &&
+		(wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
 
 	// ignore injected keystrokes
 	if(caps && (data->flags & LLKHF_INJECTED) == 0)
@@ -534,6 +536,10 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 			// That isn't good...
 			_beginthread(SwitchAndConvert, 0, NULL);
 			return 1; // prevent windows from handling the keystroke
+		}
+		else if(GetKeyState(VK_SHIFT) < 0)
+		{
+			// Skip Shift+CapsLock
 		}
 		else
 		{
