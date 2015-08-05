@@ -540,6 +540,23 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 		{
 			// Handle Alt+CapsLock - switch current layout pair
 			SwitchPair();
+
+			// This call of keybd_event is a workaround for the following issue:
+			// Because we disable the WM_KEYDOWN-VK_CAPITAL message, the target
+			// window might get the following sequence:
+			// 1. WM_KEYDOWN-VK_MENU
+			// 2. WM_KEYUP  -VK_MENU
+			// 3. WM_KEYUP  -VK_CAPITAL
+			// Between 1 and 2 there's the deleted message of WM_KEYDOWN-VK_CAPITAL.
+			// Because of this sequence, the target window activates the menu, as
+			// if the ALT button was pressed.
+			// As a workaround, we send an additional WM_KEYUP-VK_CAPITAL message,
+			// so it becomes:
+			// 1. WM_KEYDOWN-VK_MENU
+			// 2. WM_KEYUP  -VK_CAPITAL
+			// 3. WM_KEYUP  -VK_MENU
+			// 4. WM_KEYUP  -VK_CAPITAL
+			keybd_event(VK_CAPITAL, 0, KEYEVENTF_KEYUP, 0);
 			return 1;
 		}
 		else if(GetKeyState(VK_CONTROL) < 0)
