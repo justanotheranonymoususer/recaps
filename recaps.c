@@ -34,6 +34,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 	L"Capslock changes between the chosen pair of keyboard laguanges.\r\n"\
 	L"Alt+Capslock changes the chosen pair of keyboard languages.\r\n"\
 	L"Ctrl+Capslock fixes text you typed in the wrong laguange.\r\n"\
+	L"* If both Ctrl keys (left and right) are pressed, only the selected text will be fixed.\r\n"\
 	L"Shift+Capslock is the old Capslock that lets you type in CAPITAL.\r\n"\
 	L"\r\n"\
 	L"http://www.gooli.org/blog/recaps\r\n\r\n"\
@@ -506,11 +507,15 @@ HKL SwitchPair()
 // Selects the entire current line and converts it to the current keyboard layout
 void SwitchAndConvert(void *pParam)
 {
-	UNREFERENCED_PARAMETER(pParam);
+	BOOL bSelectAll = pParam != NULL;
 
 	if(TryEnterCriticalSection(&g_csSwitchAndConvert))
 	{
-		SendKeyCombo(VK_CONTROL, 'A', TRUE);
+		if(bSelectAll)
+		{
+			SendKeyCombo(VK_CONTROL, 'A', TRUE);
+		}
+
 		HKL sourceLayout = GetCurrentLayout();
 		HKL targetLayout = SwitchLayout();
 		if(sourceLayout && targetLayout)
@@ -561,12 +566,15 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 		}
 		else if(GetKeyState(VK_CONTROL) < 0)
 		{
-			// Handle Ctrl+CapsLock - switch current layout and convert text in current field
+			// Handle Ctrl+CapsLock - switch current layout and convert text in current field.
+			// If both ctrl keys are pressed, don't select all text with Ctrl+A before converting.
+
+			BOOL bBothControlsAreDown = GetKeyState(VK_LCONTROL) < 0 && GetKeyState(VK_RCONTROL) < 0;
 
 			// We start SwitchLayoutAndConvertSelected in another thread since it simulates 
 			// keystrokes to copy and paste the text which call back into this hook.
 			// That isn't good...
-			_beginthread(SwitchAndConvert, 0, NULL);
+			_beginthread(SwitchAndConvert, 0, bBothControlsAreDown ? NULL : (void *)1);
 			return 1; // prevent windows from handling the keystroke
 		}
 		else if(GetKeyState(VK_SHIFT) < 0)
