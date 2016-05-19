@@ -349,7 +349,7 @@ void SendKeyCombo(BYTE vkModifier, BYTE vk, BOOL extended)
 	if(!modPressed)
 		keybd_event(vkModifier, 0, 0, 0);
 	keybd_event(vk, 0, extended ? KEYEVENTF_EXTENDEDKEY : 0, 0);
+	keybd_event(vk, 0, KEYEVENTF_KEYUP | (extended ? KEYEVENTF_EXTENDEDKEY : 0), 0);
 	if(!modPressed)
 		keybd_event(vkModifier, 0, KEYEVENTF_KEYUP, 0);
-	keybd_event(vk, 0, KEYEVENTF_KEYUP | (extended ? KEYEVENTF_EXTENDEDKEY : 0), 0);
 }
