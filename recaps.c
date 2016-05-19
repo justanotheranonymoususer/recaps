@@ -86,7 +86,8 @@ void LoadConfiguration(KeyboardLayoutInfo* info);
 void SaveConfiguration(const KeyboardLayoutInfo* info);
 
 HWND RemoteGetFocus();
-HKL SwitchLayout();
+HKL SwitchLayout(HWND hWnd, HKL hkl);
+HKL SwitchToPairedLayout();
 HKL SwitchPair();
 LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 
@@ -446,7 +447,56 @@ HKL GetCurrentLayout()
 
 ///////////////////////////////////////////////////////////////////////////////
 // Switches the current language
-HKL SwitchLayout()
+HKL SwitchLayout(HWND hWnd, HKL hkl)
+{
+	BOOL bBuggy = FALSE;
+
+	HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+
+	WCHAR szClassName[256];
+	if(hRootWnd && GetClassName(hRootWnd, szClassName, _countof(szClassName)))
+	{
+		// Skype and Word hang when posting WM_INPUTLANGCHANGEREQUEST.
+		if(wcscmp(szClassName, L"tSkMainForm") == 0 ||
+			wcscmp(szClassName, L"OpusApp") == 0)
+		{
+			bBuggy = TRUE;
+		}
+	}
+
+	if(bBuggy)
+	{
+		// A workaround for apps which don't support WM_INPUTLANGCHANGEREQUEST.
+		for(UINT i = 0; i < g_keyboardInfo.count; i++)
+		{
+			HKL currentLayout = GetWindowLayout(hWnd);
+			if(currentLayout == hkl)
+				break;
+
+			// Change layout by simulating Alt+Shift.
+			SendKeyCombo(VK_MENU, VK_SHIFT, FALSE);
+
+			// Wait for the change to apply.
+			for(UINT j = 0; j < 10; j++)
+			{
+				if(GetWindowLayout(hWnd) != currentLayout)
+					break;
+
+				Sleep(30);
+			}
+		}
+	}
+	else
+	{
+		PostMessage(hWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)hkl);
+	}
+
+	return hkl;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Switches the current language to the other language of the current pair
+HKL SwitchToPairedLayout()
 {
 	HWND hWnd = RemoteGetFocus();
 	if(!hWnd)
@@ -471,10 +521,12 @@ HKL SwitchLayout()
 		newLanguage = g_keyboardInfo.main;
 
 	// Activate the new language
-	PostMessage(hWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[newLanguage]));
+	SwitchLayout(hWnd, g_keyboardInfo.hkls[newLanguage]);
+
 #ifdef _DEBUG
 	PrintDebugString("Language set to %S", g_keyboardInfo.names[newLanguage]);
 #endif
+
 	return g_keyboardInfo.hkls[newLanguage];
 }
 
@@ -495,7 +547,7 @@ HKL SwitchPair()
 	HWND hWnd = RemoteGetFocus();
 	if(hWnd)
 	{
-		PostMessage(hWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)(g_keyboardInfo.hkls[newPaired]));
+		SwitchLayout(hWnd, g_keyboardInfo.hkls[newPaired]);
 	}
 
 	SaveConfiguration(&g_keyboardInfo);
@@ -513,11 +565,11 @@ void SwitchAndConvert(void *pParam)
 	{
 		if(bSelectAll)
 		{
-			SendKeyCombo(VK_CONTROL, 'A', TRUE);
+			SendKeyCombo(VK_CONTROL, 'A', FALSE);
 		}
 
 		HKL sourceLayout = GetCurrentLayout();
-		HKL targetLayout = SwitchLayout();
+		HKL targetLayout = SwitchToPairedLayout();
 		if(sourceLayout && targetLayout)
 		{
 			ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
@@ -584,7 +636,7 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 		else
 		{
 			// Handle CapsLock - only switch current layout
-			SwitchLayout();
+			SwitchToPairedLayout();
 			return 1;
 		}
 	}
