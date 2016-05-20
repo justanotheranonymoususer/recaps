@@ -458,6 +458,7 @@ HKL SwitchLayout(HWND hWnd, HKL hkl)
 	{
 		// Skype and Word hang when posting WM_INPUTLANGCHANGEREQUEST.
 		if(wcscmp(szClassName, L"tSkMainForm") == 0 ||
+			wcscmp(szClassName, L"TConversationForm") == 0 ||
 			wcscmp(szClassName, L"OpusApp") == 0)
 		{
 			bBuggy = TRUE;
