@@ -451,10 +451,10 @@ HKL SwitchLayout(HWND hWnd, HKL hkl)
 {
 	BOOL bBuggy = FALSE;
 
-	HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+	HWND hRootOwnerWnd = GetAncestor(hWnd, GA_ROOTOWNER);
 
 	WCHAR szClassName[256];
-	if(hRootWnd && GetClassName(hRootWnd, szClassName, _countof(szClassName)))
+	if(hRootOwnerWnd && GetClassName(hRootOwnerWnd, szClassName, _countof(szClassName)))
 	{
 		// Skype and Word hang when posting WM_INPUTLANGCHANGEREQUEST.
 		if(wcscmp(szClassName, L"tSkMainForm") == 0 ||
@@ -475,7 +475,7 @@ HKL SwitchLayout(HWND hWnd, HKL hkl)
 				break;
 
 			// Change layout by simulating Alt+Shift.
-			SendKeyCombo(VK_MENU, VK_SHIFT, FALSE);
+			SendAltShift();
 
 			// Wait for the change to apply.
 			for(UINT j = 0; j < 10; j++)
@@ -566,7 +566,7 @@ void SwitchAndConvert(void *pParam)
 	{
 		if(bSelectAll)
 		{
-			SendKeyCombo(VK_CONTROL, 'A', FALSE);
+			SendKeyCombo('A', TRUE, FALSE, FALSE);
 		}
 
 		HKL sourceLayout = GetCurrentLayout();

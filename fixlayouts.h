@@ -35,5 +35,5 @@ WCHAR* GetClipboardText();
 BOOL SetClipboardText(const WCHAR* text);
 
 // Functions that simulate key presses in the current window
-void SendKey(BYTE vk, BOOL extended);
-void SendKeyCombo(BYTE vkModifier, BYTE vk, BOOL extended);
+void SendKeyCombo(BYTE vk, BOOL ctrl, BOOL alt, BOOL shift);
+void SendAltShift();

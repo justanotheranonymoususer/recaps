@@ -25,7 +25,7 @@ void ConvertSelectedTextInActiveWindow(HKL hklSource, HKL hklTarget)
 	}
 
 	// copy the selected text by simulating Ctrl-C
-	SendKeyCombo(VK_CONTROL, 'C', FALSE);
+	SendKeyCombo('C', TRUE, FALSE, FALSE);
 
 	// wait until copy operation completes and get the copied data from the clipboard
 	// this loop has the nice side effect of setting copyOK to FALSE if there's no
@@ -67,7 +67,7 @@ void ConvertSelectedTextInActiveWindow(HKL hklSource, HKL hklTarget)
 			if(SetClipboardText(targetText))
 			{
 				// simulate Ctrl-V to paste the text, replacing the previous text
-				SendKeyCombo(VK_CONTROL, 'V', FALSE);
+				SendKeyCombo('V', TRUE, FALSE, FALSE);
 
 				// let the application complete pasting before putting the old data back on the clipboard
 				Sleep(REMOTE_APP_WAIT);
@@ -334,22 +334,69 @@ BOOL SetClipboardText(const WCHAR* text)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Simulates a key press in the active window
-void SendKey(BYTE vk, BOOL extended)
+// Simulates a key combination (such as Ctrl+X) in the active window
+void SendKeyCombo(BYTE vk, BOOL ctrl, BOOL alt, BOOL shift)
 {
-	keybd_event(vk, 0, extended ? KEYEVENTF_EXTENDEDKEY : 0, 0);
-	keybd_event(vk, 0, KEYEVENTF_KEYUP | (extended ? KEYEVENTF_EXTENDEDKEY : 0), 0);
+	BYTE vkModifiers[3] = { VK_CONTROL, VK_MENU, VK_SHIFT };
+	BOOL bModRequested[3] = { ctrl != 0, alt != 0, shift != 0 };
+	BOOL bModPressed[3];
+	BOOL bKeyPressed;
+
+	for(int i = 0; i < 3; i++)
+		bModPressed[i] = GetKeyState(vkModifiers[i]) < 0;
+
+	bKeyPressed = GetKeyState(vk) < 0;
+
+	for(int i = 0; i < 3; i++)
+	{
+		if(bModRequested[i] != bModPressed[i])
+			keybd_event(vkModifiers[i], 0, bModPressed[i] ? KEYEVENTF_KEYUP : 0, 0);
+	}
+
+	if(!bKeyPressed)
+	{
+		keybd_event(vk, 0, 0, 0);
+		keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+	}
+	else
+	{
+		keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+		keybd_event(vk, 0, 0, 0);
+	}
+
+	for(int i = 3; i >= 0; i--)
+	{
+		if(bModRequested[i] != bModPressed[i])
+			keybd_event(vkModifiers[i], 0, bModPressed[i] ? 0 : KEYEVENTF_KEYUP, 0);
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Simulates a key combination (such as Ctrl+X) in the active window
-void SendKeyCombo(BYTE vkModifier, BYTE vk, BOOL extended)
+// Simulates Alt+Shift to change languages
+void SendAltShift()
 {
-	BOOL modPressed = GetKeyState(vkModifier) < 0;
-	if(!modPressed)
-		keybd_event(vkModifier, 0, 0, 0);
-	keybd_event(vk, 0, extended ? KEYEVENTF_EXTENDEDKEY : 0, 0);
-	keybd_event(vk, 0, KEYEVENTF_KEYUP | (extended ? KEYEVENTF_EXTENDEDKEY : 0), 0);
-	if(!modPressed)
-		keybd_event(vkModifier, 0, KEYEVENTF_KEYUP, 0);
+	BYTE vkModifiers[3] = { VK_CONTROL, VK_MENU, VK_SHIFT };
+	BOOL bModRequested[3] = { FALSE, TRUE, TRUE };
+	BOOL bModPressed[3];
+
+	for(int i = 0; i < 3; i++)
+		bModPressed[i] = GetKeyState(vkModifiers[i]) < 0;
+
+	for(int i = 0; i < 3; i++)
+	{
+		if(bModRequested[i] != bModPressed[i])
+			keybd_event(vkModifiers[i], 0, bModPressed[i] ? KEYEVENTF_KEYUP : 0, 0);
+	}
+
+	if(bModRequested[2] && bModPressed[2])
+	{
+		keybd_event(vkModifiers[2], 0, KEYEVENTF_KEYUP, 0);
+		keybd_event(vkModifiers[2], 0, 0, 0);
+	}
+
+	for(int i = 3; i >= 0; i--)
+	{
+		if(bModRequested[i] != bModPressed[i])
+			keybd_event(vkModifiers[i], 0, bModPressed[i] ? 0 : KEYEVENTF_KEYUP, 0);
+	}
 }
