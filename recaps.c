@@ -28,17 +28,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "utils.h"
 
 #define HELP_MESSAGE \
-	L"Recaps allows you to quickly switch the current\r\n"\
-	L"language using the Capslock key.\r\n"\
-	L"\r\n"\
-	L"Capslock changes between the chosen pair of keyboard laguanges.\r\n"\
-	L"Alt+Capslock changes the chosen pair of keyboard languages.\r\n"\
-	L"Ctrl+Capslock fixes text you typed in the wrong laguange.\r\n"\
-	L"* If both Ctrl keys (left and right) are pressed, only the selected text will be fixed.\r\n"\
-	L"Shift+Capslock is the old Capslock that lets you type in CAPITAL.\r\n"\
-	L"\r\n"\
-	L"http://www.gooli.org/blog/recaps\r\n\r\n"\
-	L"Eli Golovinsky, Israel 2008\r\n"
+	L"Recaps allows you to quickly switch the current\n"\
+	L"language using the Capslock key.\n"\
+	L"\n"\
+	L"Capslock changes between the chosen pair of keyboard laguanges.\n"\
+	L"Alt+Capslock changes the chosen pair of keyboard languages.\n"\
+	L"Ctrl+Capslock fixes text you typed in the wrong laguange.\n"\
+	L"* If both Ctrl keys (left and right) are pressed, only the selected text will be fixed.\n"\
+	L"Shift+Capslock is the old Capslock that lets you type in CAPITAL.\n"\
+	L"\n"\
+	L"http://www.gooli.org/blog/recaps\n\n"\
+	L"Eli Golovinsky, Israel 2008"
 
 #define HELP_TITLE \
     L"Recaps 0.7 alpha - Retake your Capslock!"
