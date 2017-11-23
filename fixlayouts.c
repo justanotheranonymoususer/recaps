@@ -364,7 +364,7 @@ void SendKeyCombo(BYTE vk, BOOL ctrl, BOOL alt, BOOL shift)
 		keybd_event(vk, 0, 0, 0);
 	}
 
-	for(int i = 3; i >= 0; i--)
+	for(int i = 2; i >= 0; i--)
 	{
 		if(bModRequested[i] != bModPressed[i])
 			keybd_event(vkModifiers[i], 0, bModPressed[i] ? 0 : KEYEVENTF_KEYUP, 0);
@@ -394,7 +394,7 @@ void SendAltShift()
 		keybd_event(vkModifiers[2], 0, 0, 0);
 	}
 
-	for(int i = 3; i >= 0; i--)
+	for(int i = 2; i >= 0; i--)
 	{
 		if(bModRequested[i] != bModPressed[i])
 			keybd_event(vkModifiers[i], 0, bModPressed[i] ? 0 : KEYEVENTF_KEYUP, 0);
