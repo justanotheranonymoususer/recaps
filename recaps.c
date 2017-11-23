@@ -53,13 +53,24 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Tray icon constants
 #define ID_TRAYICON          1
 #define APPWM_TRAYICON       WM_APP
-#define APPWM_NOP            WM_APP + 1
 
 // Our commands
 #define ID_ABOUT             2000
 #define ID_EXIT              2001
 #define ID_MAIN_LANG         2002
 #define ID_LANG              (2002 + MAX_LAYOUTS)
+
+// Custom messages
+#define APPWM_LANG_ACTION    (WM_APP + 1)
+
+typedef enum
+{
+	LANG_ACTION_NONE,
+	LANG_ACTION_SWITCH_LAYOUT,
+	LANG_ACTION_SWITCH_PAIR,
+	LANG_ACTION_CONVERT_ALL_TEXT,
+	LANG_ACTION_CONVERT_SELECTED_TEXT,
+} LangAction;
 
 typedef struct
 {
@@ -70,11 +81,14 @@ typedef struct
 	UINT  paired;
 } KeyboardLayoutInfo;
 
-KeyboardLayoutInfo g_keyboardInfo = { 0 };
-BOOL g_modalShown = FALSE;
-HHOOK g_hHook = NULL;
-UINT g_uTaskbarRestart = 0;
-CRITICAL_SECTION g_csSwitchAndConvert;
+KeyboardLayoutInfo g_keyboardInfo;
+BOOL g_bShowTrayIcon;
+BOOL g_bModalShown;
+HHOOK g_hKeyboardHook;
+UINT g_uTaskbarRestart;
+HWND g_hMainWnd;
+HANDLE g_hKeyboardHookThread;
+DWORD g_dwKeyboardThreadId;
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int OnTrayIcon(HWND hWnd, WPARAM wParam, LPARAM lParam);
@@ -86,10 +100,16 @@ void LoadConfiguration(KeyboardLayoutInfo* info);
 void SaveConfiguration(const KeyboardLayoutInfo* info);
 
 HWND RemoteGetFocus();
+HKL GetWindowLayout(HWND hWnd);
+HKL GetCurrentLayout();
 HKL SwitchLayout(HWND hWnd, HKL hkl);
 HKL SwitchToPairedLayout();
 HKL SwitchPair();
-LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam);
+void SwitchAndConvert(BOOL bOnlySelected);
+BOOL KeyboardHookInit();
+void KeyboardHookUninit();
+DWORD WINAPI KeyboardHookThread(LPVOID pParameter);
+LRESULT CALLBACK LowLevelKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Program's entry point
@@ -111,25 +131,18 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	}
 
 	// Initialize
-	InitializeCriticalSection(&g_csSwitchAndConvert);
 	GetKeyboardLayouts(&g_keyboardInfo);
 	LoadConfiguration(&g_keyboardInfo);
-	BOOL bShowTrayIcon = !DoesCmdLineSwitchExists(L"-no_icon");
+	g_bShowTrayIcon = !DoesCmdLineSwitchExists(L"-no_icon");
 
-	if(bShowTrayIcon)
-	{
-		// Create a fake window to listen to events
-		WNDCLASSEX wclx = { 0 };
-		wclx.cbSize = sizeof(wclx);
-		wclx.lpfnWndProc = &WindowProc;
-		wclx.hInstance = hInstance;
-		wclx.lpszClassName = WINDOWCLASS_NAME;
-		RegisterClassEx(&wclx);
-		CreateWindow(WINDOWCLASS_NAME, NULL, 0, 0, 0, 0, 0, NULL, 0, hInstance, 0);
-	}
-
-	// Set hook to capture CapsLock
-	g_hHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelHookProc, GetModuleHandle(NULL), 0);
+	// Create a fake window to listen to events
+	WNDCLASSEX wclx = { 0 };
+	wclx.cbSize = sizeof(wclx);
+	wclx.lpfnWndProc = WindowProc;
+	wclx.hInstance = hInstance;
+	wclx.lpszClassName = WINDOWCLASS_NAME;
+	RegisterClassEx(&wclx);
+	g_hMainWnd = CreateWindow(WINDOWCLASS_NAME, NULL, 0, 0, 0, 0, 0, NULL, 0, hInstance, NULL);
 
 	// Handle messages
 	MSG msg;
@@ -140,14 +153,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	}
 
 	// Clean up
-	UnhookWindowsHookEx(g_hHook);
-	if(bShowTrayIcon)
-		UnregisterClass(WINDOWCLASS_NAME, hInstance);
+	UnregisterClass(WINDOWCLASS_NAME, hInstance);
 	SaveConfiguration(&g_keyboardInfo);
-	// Make sure that no SwitchAndConvert threads are running
-	EnterCriticalSection(&g_csSwitchAndConvert);
-	LeaveCriticalSection(&g_csSwitchAndConvert);
-	DeleteCriticalSection(&g_csSwitchAndConvert);
 	CloseHandle(mutex);
 
 	return 0;
@@ -161,7 +168,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_CREATE:
 		g_uTaskbarRestart = RegisterWindowMessage(L"TaskbarCreated");
-		AddTrayIcon(hWnd, 0, APPWM_TRAYICON, IDI_MAINFRAME, TITLE);
+		if(g_bShowTrayIcon)
+		{
+			AddTrayIcon(hWnd, 0, APPWM_TRAYICON, IDI_MAINFRAME, TITLE);
+		}
+
+		// Set hook to capture CapsLock
+		KeyboardHookInit();
 		return 0;
 
 	case APPWM_TRAYICON:
@@ -175,14 +188,42 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		return 0;
 
 	case WM_DESTROY:
-		RemoveTrayIcon(hWnd, 0);
+		if(g_bShowTrayIcon)
+		{
+			RemoveTrayIcon(hWnd, 0);
+		}
+		KeyboardHookUninit();
 		PostQuitMessage(0);
+		return 0;
+
+	case APPWM_LANG_ACTION:
+		switch(wParam)
+		{
+		case LANG_ACTION_SWITCH_LAYOUT:
+			SwitchToPairedLayout();
+			break;
+
+		case LANG_ACTION_SWITCH_PAIR:
+			SwitchPair();
+			break;
+
+		case LANG_ACTION_CONVERT_ALL_TEXT:
+			SwitchAndConvert(FALSE);
+			break;
+
+		case LANG_ACTION_CONVERT_SELECTED_TEXT:
+			SwitchAndConvert(TRUE);
+			break;
+		}
 		return 0;
 
 	default:
 		if(uMsg == g_uTaskbarRestart)
 		{
-			AddTrayIcon(hWnd, 0, APPWM_TRAYICON, IDI_MAINFRAME, TITLE);
+			if(g_bShowTrayIcon)
+			{
+				AddTrayIcon(hWnd, 0, APPWM_TRAYICON, IDI_MAINFRAME, TITLE);
+			}
 			return 0;
 		}
 
@@ -196,7 +237,7 @@ int OnTrayIcon(HWND hWnd, WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(wParam);
 
-	if(g_modalShown == TRUE)
+	if(g_bModalShown == TRUE)
 		return 0;
 
 	switch(lParam)
@@ -293,13 +334,13 @@ BOOL ShowPopupMenu(HWND hWnd)
 	POINT curpos;
 	GetCursorPos(&curpos);
 	SetForegroundWindow(hWnd);
-	g_modalShown = TRUE;
+	g_bModalShown = TRUE;
 	UINT cmd = TrackPopupMenu(
 		hPop, TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
 		curpos.x, curpos.y, 0, hWnd, NULL
 		);
 	PostMessage(hWnd, WM_NULL, 0, 0);
-	g_modalShown = FALSE;
+	g_bModalShown = FALSE;
 
 	// Send a command message to the window to handle the menu item the user chose
 	if(cmd)
@@ -558,34 +599,113 @@ HKL SwitchPair()
 
 ///////////////////////////////////////////////////////////////////////////////
 // Selects the entire current line and converts it to the current keyboard layout
-void SwitchAndConvert(void *pParam)
+void SwitchAndConvert(BOOL bOnlySelected)
 {
-	BOOL bSelectAll = pParam != NULL;
-
-	if(TryEnterCriticalSection(&g_csSwitchAndConvert))
+	if(!bOnlySelected)
 	{
-		if(bSelectAll)
-		{
-			SendKeyCombo('A', TRUE, FALSE, FALSE);
-		}
+		SendKeyCombo('A', TRUE, FALSE, FALSE);
+	}
 
-		HKL sourceLayout = GetCurrentLayout();
-		HKL targetLayout = SwitchToPairedLayout();
-		if(sourceLayout && targetLayout)
-		{
-			ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
-		}
-
-		LeaveCriticalSection(&g_csSwitchAndConvert);
+	HKL sourceLayout = GetCurrentLayout();
+	HKL targetLayout = SwitchToPairedLayout();
+	if(sourceLayout && targetLayout)
+	{
+		ConvertSelectedTextInActiveWindow(sourceLayout, targetLayout);
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// A LowLevelHookProc implementation that captures the CapsLock key
-LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
+// Creates a thread, and initializes the keyboard hook inside it
+BOOL KeyboardHookInit()
 {
-	if(nCode < 0)
-		return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+	BOOL bSuccess = FALSE;
+
+	HANDLE hThreadReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if(hThreadReadyEvent)
+	{
+		g_hKeyboardHookThread = CreateThread(NULL, 0, KeyboardHookThread,
+			(void*)hThreadReadyEvent, CREATE_SUSPENDED, &g_dwKeyboardThreadId);
+		if(g_hKeyboardHookThread)
+		{
+			SetThreadPriority(g_hKeyboardHookThread, THREAD_PRIORITY_TIME_CRITICAL);
+			ResumeThread(g_hKeyboardHookThread);
+
+			WaitForSingleObject(hThreadReadyEvent, INFINITE);
+
+			bSuccess = TRUE;
+		}
+
+		CloseHandle(hThreadReadyEvent);
+	}
+
+	return bSuccess;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Uninitializes the keyboard hook, and ends the thread that runs it
+void KeyboardHookUninit()
+{
+	HANDLE hThread = InterlockedExchangePointer(&g_hKeyboardHookThread, NULL);
+	if(hThread)
+	{
+		PostThreadMessage(g_dwKeyboardThreadId, WM_APP, 0, 0);
+		WaitForSingleObject(hThread, INFINITE);
+		CloseHandle(hThread);
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// The keyboard hook thread
+DWORD WINAPI KeyboardHookThread(LPVOID pParameter)
+{
+	HANDLE hThreadReadyEvent;
+	MSG msg;
+	BOOL bRet;
+	HANDLE hThread;
+
+	hThreadReadyEvent = (HANDLE)pParameter;
+	PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+	SetEvent(hThreadReadyEvent);
+
+	g_hKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardHookProc, GetModuleHandle(NULL), 0);
+	if(g_hKeyboardHook)
+	{
+		while((bRet = GetMessage(&msg, NULL, 0, 0)) != 0)
+		{
+			if(bRet == -1)
+			{
+				msg.wParam = 0;
+				break;
+			}
+
+			if(msg.hwnd == NULL && msg.message == WM_APP)
+			{
+				PostQuitMessage(0);
+				continue;
+			}
+
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+
+		UnhookWindowsHookEx(g_hKeyboardHook);
+	}
+	else
+		msg.wParam = 0;
+
+	hThread = InterlockedExchangePointer(&g_hKeyboardHookThread, NULL);
+	if(hThread)
+		CloseHandle(hThread);
+
+	return (DWORD)msg.wParam;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// A LowLevelHookProc implementation that captures the CapsLock key
+LRESULT CALLBACK LowLevelKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	if(nCode != HC_ACTION)
+		return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 
 	KBDLLHOOKSTRUCT* data = (KBDLLHOOKSTRUCT*)lParam;
 	BOOL caps = data->vkCode == VK_CAPITAL &&
@@ -597,7 +717,7 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 		if(GetKeyState(VK_MENU) < 0)
 		{
 			// Handle Alt+CapsLock - switch current layout pair
-			SwitchPair();
+			PostMessage(g_hMainWnd, APPWM_LANG_ACTION, LANG_ACTION_SWITCH_PAIR, 0);
 
 			// This call of keybd_event is a workaround for the following issue:
 			// Because we disable the WM_KEYDOWN-VK_CAPITAL message, the target
@@ -623,11 +743,9 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 			// If both ctrl keys are pressed, don't select all text with Ctrl+A before converting.
 
 			BOOL bBothControlsAreDown = GetKeyState(VK_LCONTROL) < 0 && GetKeyState(VK_RCONTROL) < 0;
+			WPARAM wAction = bBothControlsAreDown ? LANG_ACTION_CONVERT_SELECTED_TEXT : LANG_ACTION_CONVERT_ALL_TEXT;
+			PostMessage(g_hMainWnd, APPWM_LANG_ACTION, wAction, 0);
 
-			// We start SwitchLayoutAndConvertSelected in another thread since it simulates 
-			// keystrokes to copy and paste the text which call back into this hook.
-			// That isn't good...
-			_beginthread(SwitchAndConvert, 0, bBothControlsAreDown ? NULL : (void *)1);
 			return 1; // prevent windows from handling the keystroke
 		}
 		else if(GetKeyState(VK_SHIFT) < 0)
@@ -637,10 +755,10 @@ LRESULT CALLBACK LowLevelHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 		else
 		{
 			// Handle CapsLock - only switch current layout
-			SwitchToPairedLayout();
+			PostMessage(g_hMainWnd, APPWM_LANG_ACTION, LANG_ACTION_SWITCH_LAYOUT, 0);
 			return 1;
 		}
 	}
 
-	return CallNextHookEx(g_hHook, nCode, wParam, lParam);
+	return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 }
